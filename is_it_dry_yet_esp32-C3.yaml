@@ -1,0 +1,137 @@
+# Dashboard import for additional configurations
+dashboard_import:
+  package_import_url: github://esphome/firmware/esphome-web/esp32c3.yaml@main
+  import_full_config: true
+
+# Set up Bluetooth LE for Wi-Fi provisioning
+esp32_improv:
+  authorizer: none
+
+# Web server for additional functionality
+web_server:
+
+# Define analog pin sensors for moisture probes with internal pull-down resistors
+sensor:
+  - platform: adc
+    pin:
+      number: GPIO0
+      mode: INPUT_PULLUP
+    name: "Moisture Probe 1"
+    id: moisture_probe_1
+    update_interval: 10s
+    accuracy_decimals: 2
+    filters:
+      - multiply: 3.3
+
+  - platform: adc
+    pin:
+      number: GPIO1
+      mode: INPUT_PULLUP
+    name: "Moisture Probe 2"
+    id: moisture_probe_2
+    update_interval: 10s
+    accuracy_decimals: 2
+    filters:
+      - multiply: 3.3
+
+  - platform: adc
+    pin:
+      number: GPIO3  # Changed from GPIO2
+      mode: INPUT_PULLUP
+    name: "Moisture Probe 3"
+    id: moisture_probe_3
+    update_interval: 10s
+    accuracy_decimals: 2
+    filters:
+      - multiply: 3.3
+
+  - platform: adc
+    pin:
+      number: GPIO4  # Changed from GPIO3
+      mode: INPUT_PULLUP
+    name: "Moisture Probe 4"
+    id: moisture_probe_4
+    update_interval: 10s
+    accuracy_decimals: 2
+    filters:
+      - multiply: 3.3
+
+  # Calculate the average moisture level
+  - platform: template
+    name: "Average Moisture"
+    id: average_moisture
+    update_interval: 10s
+    lambda: |-
+      return (
+        id(moisture_probe_1).state +
+        id(moisture_probe_2).state +
+        id(moisture_probe_3).state +
+        id(moisture_probe_4).state
+      ) / 4.0;
+    accuracy_decimals: 2
+
+# Binary sensors for moisture status (dry/wet)
+binary_sensor:
+  - platform: template
+    name: "Towel Dry Status Probe 1"
+    lambda: |-
+      return id(moisture_probe_1).state > 1.0;
+    device_class: moisture
+
+  - platform: template
+    name: "Towel Dry Status Probe 2"
+    lambda: |-
+      return id(moisture_probe_2).state > 1.0;
+    device_class: moisture
+
+  - platform: template
+    name: "Towel Dry Status Probe 3"
+    lambda: |-
+      return id(moisture_probe_3).state > 1.0;
+    device_class: moisture
+
+  - platform: template
+    name: "Towel Dry Status Probe 4"
+    lambda: |-
+      return id(moisture_probe_4).state > 1.0;
+    device_class: moisture
+
+# Outputs for the RGB LED
+output:
+  - platform: ledc
+    pin: GPIO21
+    id: output_red
+
+  - platform: ledc
+    pin: GPIO20
+    id: output_green
+
+  - platform: ledc
+    pin: GPIO8
+    id: output_blue
+
+# Define the RGB light
+light:
+  - platform: rgb
+    name: "Moisture Indicator Light"
+    id: moisture_indicator_light
+    red: output_red
+    green: output_green
+    blue: output_blue
+
+# Automation to update LED color based on moisture levels
+interval:
+  - interval: 10s
+    then:
+      - lambda: |-
+          float moisture = id(average_moisture).state;
+          // Map moisture level to percentage (0% dry, 100% wet)
+          float percentage = (moisture / 3.3) * 100.0;
+          // Calculate RGB values (red to green)
+          uint8_t red = (uint8_t)(255 * (100.0 - percentage) / 100.0);
+          uint8_t green = (uint8_t)(255 * percentage / 100.0);
+          uint8_t blue = 0;
+          // Update the RGB LED color
+          auto call = id(moisture_indicator_light).turn_on();
+          call.set_rgb(red / 255.0, green / 255.0, blue / 255.0);
+          call.perform();
